@@ -22,7 +22,7 @@ An MCP (Model Context Protocol) server for controlling Philips Hue lights via AI
 ### Pull from GitHub Container Registry
 
 ```bash
-docker pull ghcr.io/hypnodroid/phillips-hue-mcp:latest
+docker pull ghcr.io/redaphid/phillips-hue-mcp:latest
 ```
 
 ### Run
@@ -33,7 +33,7 @@ docker run -d \
   --network host \
   -e HUE_BRIDGE_IP=10.0.2.3 \
   -e HUE_USERNAME=your-token-here \
-  ghcr.io/hypnodroid/phillips-hue-mcp:latest
+  ghcr.io/redaphid/phillips-hue-mcp:latest
 ```
 
 > **Note:** `--network host` is required so the container can reach your Hue bridge on the local network.
@@ -43,7 +43,7 @@ docker run -d \
 ```yaml
 services:
   phillips-hue-mcp:
-    image: ghcr.io/hypnodroid/phillips-hue-mcp:latest
+    image: ghcr.io/redaphid/phillips-hue-mcp:latest
     network_mode: host
     environment:
       - HUE_BRIDGE_IP=10.0.2.3
