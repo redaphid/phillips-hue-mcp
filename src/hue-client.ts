@@ -1,44 +1,4 @@
-import axios, { type AxiosInstance } from 'axios';
 import https from 'node:https';
-
-/**
- * Convert HSL values (0-1) to Hue bridge native format.
- * - h: 0-1 → hue: 0-65535
- * - s: 0-1 → sat: 0-254
- * - l: 0-1 → bri: 1-254
- */
-function hslToNative(h: number, s: number, l: number): { hue: number; sat: number; bri: number } {
-  return {
-    hue: Math.round(Math.max(0, Math.min(1, h)) * 65535),
-    sat: Math.round(Math.max(0, Math.min(1, s)) * 254),
-    bri: Math.round(Math.max(0, Math.min(1, l)) * 253) + 1,
-  };
-}
-
-/**
- * Simple request queue to serialize API calls to the Hue bridge.
- * Prevents parallel requests from overwhelming the hub.
- */
-class RequestQueue {
-  private queue: Promise<void> = Promise.resolve();
-
-  async enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    let result: T;
-    let error: unknown;
-
-    this.queue = this.queue
-      .then(() => fn())
-      .then((r) => { result = r; })
-      .catch((e) => { error = e; });
-
-    await this.queue;
-
-    if (error !== undefined) {
-      throw error;
-    }
-    return result!;
-  }
-}
 
 export interface HueLight {
   id: string;
@@ -70,170 +30,122 @@ export interface HueScene {
 }
 
 export class HueClient {
-  private api: AxiosInstance;
-  private requestQueue = new RequestQueue();
+  private baseUrl: string;
+  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(bridgeIp: string, username: string) {
-    this.api = axios.create({
-      baseURL: `https://${bridgeIp}/api/${username}`,
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      timeout: 10000,
-    });
+    this.baseUrl = `/api/${username}`;
+    this.agent = new https.Agent({ rejectUnauthorized: false });
+    this.bridgeIp = bridgeIp;
   }
 
+  private agent: https.Agent;
+  private bridgeIp: string;
+
+  private async request(method: string, path: string, body?: object): Promise<any> {
+    const attempt = () => new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 10000);
+      const req = https.request({
+        hostname: this.bridgeIp,
+        path: this.baseUrl + path,
+        method,
+        agent: this.agent,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => { clearTimeout(timeout); resolve(JSON.parse(data)); });
+      });
+      req.on('error', (e) => { clearTimeout(timeout); reject(e); });
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+
+    const fn = async () => {
+      for (let i = 0; i < 3; i++) {
+        try { return await attempt(); }
+        catch (e) { if (i === 2) throw e; }
+      }
+    };
+
+    return this.pending = this.pending.then(fn, fn);
+  }
+
+  private get(path: string) { return this.request('GET', path); }
+  private put(path: string, body: object) { return this.request('PUT', path, body); }
+
   async getLights(): Promise<HueLight[]> {
-    const response = await this.requestQueue.enqueue(() => this.api.get('/lights'));
-    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
-      id,
-      name: data.name,
-      type: data.type,
-      on: data.state.on,
-      brightness: data.state.bri,
-      colorMode: data.state.colormode,
-      hue: data.state.hue,
-      saturation: data.state.sat,
-      colorTemp: data.state.ct,
-      reachable: data.state.reachable,
+    const data = await this.get('/lights');
+    return Object.entries(data).map(([id, d]: [string, any]) => ({
+      id, name: d.name, type: d.type, on: d.state.on, brightness: d.state.bri,
+      colorMode: d.state.colormode, hue: d.state.hue, saturation: d.state.sat,
+      colorTemp: d.state.ct, reachable: d.state.reachable,
     }));
   }
 
-  async getLight(lightId: string): Promise<HueLight> {
-    const response = await this.requestQueue.enqueue(() => this.api.get(`/lights/${lightId}`));
-    const data = response.data;
+  async getLight(id: string): Promise<HueLight> {
+    const d = await this.get(`/lights/${id}`);
     return {
-      id: lightId,
-      name: data.name,
-      type: data.type,
-      on: data.state.on,
-      brightness: data.state.bri,
-      colorMode: data.state.colormode,
-      hue: data.state.hue,
-      saturation: data.state.sat,
-      colorTemp: data.state.ct,
-      reachable: data.state.reachable,
+      id, name: d.name, type: d.type, on: d.state.on, brightness: d.state.bri,
+      colorMode: d.state.colormode, hue: d.state.hue, saturation: d.state.sat,
+      colorTemp: d.state.ct, reachable: d.state.reachable,
     };
   }
 
-  async setLightState(lightId: string, state: {
-    on?: boolean;
-    bri?: number;
-    hue?: number;
-    sat?: number;
-    ct?: number;
-    transitiontime?: number;
-  }): Promise<void> {
-    await this.requestQueue.enqueue(() => this.api.put(`/lights/${lightId}/state`, state));
-  }
-
-  async turnLightOn(lightId: string): Promise<void> {
-    await this.setLightState(lightId, { on: true });
-  }
-
-  async turnLightOff(lightId: string): Promise<void> {
-    await this.setLightState(lightId, { on: false });
-  }
-
-  async setBrightness(lightId: string, brightness: number): Promise<void> {
-    await this.setLightState(lightId, { on: true, bri: Math.max(1, Math.min(254, brightness)) });
-  }
-
-  async setColor(lightId: string, hue: number, saturation: number, lightness: number): Promise<void> {
-    const native = hslToNative(hue, saturation, lightness);
-    await this.setLightState(lightId, { on: true, hue: native.hue, sat: native.sat, bri: native.bri });
-  }
-
-  async setColorTemp(lightId: string, colorTemp: number): Promise<void> {
-    await this.setLightState(lightId, { on: true, ct: Math.max(153, Math.min(500, colorTemp)) });
-  }
+  setLightState(id: string, state: object) { return this.put(`/lights/${id}/state`, state); }
+  turnLightOn(id: string) { return this.setLightState(id, { on: true }); }
+  turnLightOff(id: string) { return this.setLightState(id, { on: false }); }
+  setBrightness(id: string, bri: number) { return this.setLightState(id, { on: true, bri: Math.min(254, Math.max(1, bri)) }); }
+  setColor(id: string, hue: number, sat: number, bri: number) { return this.setLightState(id, { on: true, hue, sat, bri }); }
+  setColorTemp(id: string, ct: number) { return this.setLightState(id, { on: true, ct: Math.min(500, Math.max(153, ct)) }); }
 
   async getRooms(): Promise<HueRoom[]> {
-    const response = await this.requestQueue.enqueue(() => this.api.get('/groups'));
-    return Object.entries(response.data)
-      .filter(([, data]: [string, any]) => data.type === 'Room' || data.type === 'Zone')
-      .map(([id, data]: [string, any]) => ({
-        id,
-        name: data.name,
-        type: data.type,
-        lights: data.lights,
-        on: data.action?.on ?? false,
-        brightness: data.action?.bri ?? 0,
+    const data = await this.get('/groups');
+    return Object.entries(data)
+      .filter(([, d]: [string, any]) => d.type === 'Room' || d.type === 'Zone')
+      .map(([id, d]: [string, any]) => ({
+        id, name: d.name, type: d.type, lights: d.lights,
+        on: d.action?.on ?? false, brightness: d.action?.bri ?? 0,
       }));
   }
 
-  async getRoom(roomId: string): Promise<HueRoom> {
-    const response = await this.requestQueue.enqueue(() => this.api.get(`/groups/${roomId}`));
-    const data = response.data;
+  async getRoom(id: string): Promise<HueRoom> {
+    const d = await this.get(`/groups/${id}`);
     return {
-      id: roomId,
-      name: data.name,
-      type: data.type,
-      lights: data.lights,
-      on: data.action?.on ?? false,
-      brightness: data.action?.bri ?? 0,
+      id, name: d.name, type: d.type, lights: d.lights,
+      on: d.action?.on ?? false, brightness: d.action?.bri ?? 0,
     };
   }
 
-  async setRoomState(roomId: string, state: {
-    on?: boolean;
-    bri?: number;
-    hue?: number;
-    sat?: number;
-    ct?: number;
-    transitiontime?: number;
-  }): Promise<void> {
-    await this.requestQueue.enqueue(() => this.api.put(`/groups/${roomId}/action`, state));
-  }
-
-  async turnRoomOn(roomId: string): Promise<void> {
-    await this.setRoomState(roomId, { on: true });
-  }
-
-  async turnRoomOff(roomId: string): Promise<void> {
-    await this.setRoomState(roomId, { on: false });
-  }
-
-  async setRoomBrightness(roomId: string, brightness: number): Promise<void> {
-    await this.setRoomState(roomId, { on: true, bri: Math.max(1, Math.min(254, brightness)) });
-  }
-
-  async setRoomColor(roomId: string, hue: number, saturation: number, lightness: number): Promise<void> {
-    const native = hslToNative(hue, saturation, lightness);
-    await this.setRoomState(roomId, { on: true, hue: native.hue, sat: native.sat, bri: native.bri });
-  }
-
-  async setRoomColorTemp(roomId: string, colorTemp: number): Promise<void> {
-    await this.setRoomState(roomId, { on: true, ct: Math.max(153, Math.min(500, colorTemp)) });
-  }
+  setRoomState(id: string, state: object) { return this.put(`/groups/${id}/action`, state); }
+  turnRoomOn(id: string) { return this.setRoomState(id, { on: true }); }
+  turnRoomOff(id: string) { return this.setRoomState(id, { on: false }); }
+  setRoomBrightness(id: string, bri: number) { return this.setRoomState(id, { on: true, bri: Math.min(254, Math.max(1, bri)) }); }
+  setRoomColor(id: string, hue: number, sat: number, bri: number) { return this.setRoomState(id, { on: true, hue, sat, bri }); }
+  setRoomColorTemp(id: string, ct: number) { return this.setRoomState(id, { on: true, ct: Math.min(500, Math.max(153, ct)) }); }
 
   async getScenes(): Promise<HueScene[]> {
-    const response = await this.requestQueue.enqueue(() => this.api.get('/scenes'));
-    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
-      id,
-      name: data.name,
-      group: data.group,
-      type: data.type,
+    const data = await this.get('/scenes');
+    return Object.entries(data).map(([id, d]: [string, any]) => ({
+      id, name: d.name, group: d.group, type: d.type,
     }));
   }
 
   async activateScene(sceneId: string, groupId?: string): Promise<void> {
     if (groupId) {
-      await this.requestQueue.enqueue(() => this.api.put(`/groups/${groupId}/action`, { scene: sceneId }));
+      await this.put(`/groups/${groupId}/action`, { scene: sceneId });
     } else {
       const scenes = await this.getScenes();
       const scene = scenes.find(s => s.id === sceneId);
-      await this.requestQueue.enqueue(() => this.api.put(`/groups/${scene?.group || '0'}/action`, { scene: sceneId }));
+      await this.put(`/groups/${scene?.group || '0'}/action`, { scene: sceneId });
     }
   }
 
   async getAllGroups(): Promise<HueRoom[]> {
-    const response = await this.requestQueue.enqueue(() => this.api.get('/groups'));
-    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
-      id,
-      name: data.name,
-      type: data.type,
-      lights: data.lights,
-      on: data.action?.on ?? false,
-      brightness: data.action?.bri ?? 0,
+    const data = await this.get('/groups');
+    return Object.entries(data).map(([id, d]: [string, any]) => ({
+      id, name: d.name, type: d.type, lights: d.lights,
+      on: d.action?.on ?? false, brightness: d.action?.bri ?? 0,
     }));
   }
 }

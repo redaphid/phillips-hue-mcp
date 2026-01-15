@@ -6,8 +6,12 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { HueClient } from './hue-client.js';
 import { randomUUID } from 'node:crypto';
-import axios from 'axios';
 import https from 'node:https';
+import { colord, extend } from 'colord';
+import names from 'colord/plugins/names';
+
+// Enable CSS color names support (type assertion needed due to CJS/ESM interop)
+extend([names as unknown as Parameters<typeof extend>[0][number]]);
 
 const HUE_BRIDGE_IP = process.env.HUE_BRIDGE_IP || '';
 const HUE_USERNAME = process.env.HUE_USERNAME || '';
@@ -18,8 +22,33 @@ const toHue = (v?: number) => v != null ? Math.round(v * 65535) : undefined;
 const toSat = (v?: number) => v != null ? Math.round(v * 254) : undefined;
 const toBri = (v?: number) => v != null ? Math.round(v * 253) + 1 : undefined;
 
+// Parse any CSS color string and convert to Hue bridge native format
+function parseColor(color: string): { hue: number; sat: number; bri: number } | null {
+  const c = colord(color);
+  if (!c.isValid()) return null;
+  const hsl = c.toHsl();
+  return {
+    hue: Math.round((hsl.h / 360) * 65535),
+    sat: Math.round((hsl.s / 100) * 254),
+    bri: Math.max(1, Math.round((hsl.l / 100) * 254)),
+  };
+}
+
 const hueClient = new HueClient(HUE_BRIDGE_IP, HUE_USERNAME);
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+// Simple https helper
+const httpsRequest = (url: string, options: https.RequestOptions = {}, body?: string): Promise<any> =>
+  new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 10000);
+    const req = https.request(url, { ...options, rejectUnauthorized: false }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => { clearTimeout(timeout); resolve(JSON.parse(data)); });
+    });
+    req.on('error', (e) => { clearTimeout(timeout); reject(e); });
+    if (body) req.write(body);
+    req.end();
+  });
 
 const server = new McpServer({
   name: 'philips-hue-mcp',
@@ -39,7 +68,7 @@ const isConfigured = () => HUE_BRIDGE_IP && HUE_USERNAME;
 
 server.registerTool('list_lights', {
   title: 'List Lights',
-  description: 'Get a list of all Philips Hue lights with their current state. Call this first to get light IDs before controlling lights.',
+  description: 'Returns a JSON array of all Philips Hue lights with their IDs, names, and current state (on/off, brightness, color). IMPORTANT: You must call this tool first before using any other light control tools, because you need the light ID numbers from this response. Example response: [{"id": "1", "name": "Living Room", "on": true, "brightness": 254}]',
 }, async () => {
   if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getLights()); }
@@ -91,17 +120,19 @@ server.registerTool('set_light_brightness', {
 
 server.registerTool('set_light_color', {
   title: 'Set Light Color',
-  description: 'Set the color of a light. Example: red at full brightness = hue:0, saturation:1, lightness:1',
+  description: 'Changes the color of ONE specific light. Use set_all_lights_color instead if you want to change ALL lights. Accepts any CSS color format. Returns success message or error.',
   inputSchema: z.object({
-    lightId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_lights.'),
-    hue: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=red, 0.33=green, 0.66=blue'),
-    saturation: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=white, 1=vivid color'),
-    lightness: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=off, 0.5=medium, 1=bright'),
+    lightId: z.string().describe('Required. The light ID as a string like "1" or "2". Get valid IDs by calling list_lights first.'),
+    color: z.string().describe('Required. Any CSS color: name (red, blue, cyan, coral, tomato), hex (#ff0000, #f00), rgb (rgb(255,0,0)), or hsl (hsl(0,100%,50%)). Examples: "red", "#00ff00", "rgb(0,0,255)", "hsl(180,100%,50%)"'),
   }),
-}, async ({ lightId, hue, saturation, lightness }) => {
+}, async ({ lightId, color }) => {
   if (!isConfigured()) return notConfigured();
-  try { await hueClient.setColor(lightId, hue, saturation, lightness); return ok(`Light ${lightId} color set`); }
-  catch (e) { return err(e); }
+  const native = parseColor(color);
+  if (!native) return err({ message: `Invalid color: "${color}". Use CSS colors like "red", "#ff0000", "rgb(255,0,0)", or "hsl(0,100%,50%)"` });
+  try {
+    await hueClient.setLightState(lightId, { on: true, ...native });
+    return ok(`Light ${lightId} set to ${color}`);
+  } catch (e) { return err(e); }
 });
 
 server.registerTool('set_light_color_temp', {
@@ -119,20 +150,20 @@ server.registerTool('set_light_color_temp', {
 
 server.registerTool('set_light_state', {
   title: 'Set Light State',
-  description: 'Set multiple properties of a light. HSL values must be 0 to 1 (e.g. 0.5, not 128).',
+  description: 'Set multiple properties of a light at once. Use this for advanced control with transitions.',
   inputSchema: z.object({
-    lightId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_lights.'),
-    on: z.boolean().optional().describe('true=on, false=off'),
-    hue: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=red, 0.33=green, 0.66=blue'),
-    saturation: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=white, 1=vivid color'),
-    lightness: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=off, 0.5=medium, 1=bright'),
-    colorTemp: z.coerce.number().min(153).max(500).optional().describe('153 to 500. Cool=153, warm=500'),
-    transitionTime: z.coerce.number().min(0).optional().describe('100ms units (10=1sec)'),
+    lightId: z.string().describe('Required. Light ID like "1" or "2". Get IDs from list_lights.'),
+    on: z.boolean().optional().describe('Optional. true=on, false=off'),
+    color: z.string().optional().describe('Optional. Any CSS color: "red", "#ff0000", "rgb(255,0,0)", "hsl(0,100%,50%)"'),
+    colorTemp: z.coerce.number().min(153).max(500).optional().describe('Optional. Color temperature 153-500. Cool=153, warm=500'),
+    transitionTime: z.coerce.number().min(0).optional().describe('Optional. Transition time in 100ms units (10=1sec)'),
   }),
-}, async ({ lightId, on, hue, saturation, lightness, colorTemp, transitionTime }) => {
+}, async ({ lightId, on, color, colorTemp, transitionTime }) => {
   if (!isConfigured()) return notConfigured();
   try {
-    await hueClient.setLightState(lightId, { on, bri: toBri(lightness), hue: toHue(hue), sat: toSat(saturation), ct: colorTemp, transitiontime: transitionTime });
+    const colorState = color ? parseColor(color) : {};
+    if (color && !parseColor(color)) return err({ message: `Invalid color: "${color}"` });
+    await hueClient.setLightState(lightId, { on, ...colorState, ct: colorTemp, transitiontime: transitionTime });
     return ok(`Light ${lightId} state updated`);
   } catch (e) { return err(e); }
 });
@@ -204,17 +235,19 @@ server.registerTool('set_room_brightness', {
 
 server.registerTool('set_room_color', {
   title: 'Set Room Color',
-  description: 'Set color of all lights in a room. Example: red at full brightness = hue:0, saturation:1, lightness:1',
+  description: 'Set the color of ALL lights in a room. Accepts any CSS color format. Returns success message or error.',
   inputSchema: z.object({
-    roomId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_rooms.'),
-    hue: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=red, 0.33=green, 0.66=blue'),
-    saturation: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=white, 1=vivid color'),
-    lightness: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=off, 0.5=medium, 1=bright'),
+    roomId: z.string().describe('Required. The room ID as a string like "1" or "2". Get valid IDs by calling list_rooms first.'),
+    color: z.string().describe('Required. Any CSS color: name (red, blue, cyan, coral, tomato), hex (#ff0000, #f00), rgb (rgb(255,0,0)), or hsl (hsl(0,100%,50%)). Examples: "red", "#00ff00", "rgb(0,0,255)", "hsl(180,100%,50%)"'),
   }),
-}, async ({ roomId, hue, saturation, lightness }) => {
+}, async ({ roomId, color }) => {
   if (!isConfigured()) return notConfigured();
-  try { await hueClient.setRoomColor(roomId, hue, saturation, lightness); return ok(`Room ${roomId} color set`); }
-  catch (e) { return err(e); }
+  const native = parseColor(color);
+  if (!native) return err({ message: `Invalid color: "${color}". Use CSS colors like "red", "#ff0000", "rgb(255,0,0)", or "hsl(0,100%,50%)"` });
+  try {
+    await hueClient.setRoomState(roomId, { on: true, ...native });
+    return ok(`Room ${roomId} set to ${color}`);
+  } catch (e) { return err(e); }
 });
 
 server.registerTool('set_room_color_temp', {
@@ -232,20 +265,20 @@ server.registerTool('set_room_color_temp', {
 
 server.registerTool('set_room_state', {
   title: 'Set Room State',
-  description: 'Set multiple properties of all lights in a room. HSL values must be 0 to 1 (e.g. 0.5, not 128).',
+  description: 'Set multiple properties of all lights in a room at once. Use this for advanced control with transitions.',
   inputSchema: z.object({
-    roomId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_rooms.'),
-    on: z.boolean().optional().describe('true=on, false=off'),
-    hue: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=red, 0.33=green, 0.66=blue'),
-    saturation: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=white, 1=vivid color'),
-    lightness: z.coerce.number().min(0).max(1).optional().describe('0 to 1 only. 0=off, 0.5=medium, 1=bright'),
-    colorTemp: z.coerce.number().min(153).max(500).optional().describe('153 to 500. Cool=153, warm=500'),
-    transitionTime: z.coerce.number().min(0).optional().describe('100ms units (10=1sec)'),
+    roomId: z.string().describe('Required. Room ID like "1" or "2". Get IDs from list_rooms.'),
+    on: z.boolean().optional().describe('Optional. true=on, false=off'),
+    color: z.string().optional().describe('Optional. Any CSS color: "red", "#ff0000", "rgb(255,0,0)", "hsl(0,100%,50%)"'),
+    colorTemp: z.coerce.number().min(153).max(500).optional().describe('Optional. Color temperature 153-500. Cool=153, warm=500'),
+    transitionTime: z.coerce.number().min(0).optional().describe('Optional. Transition time in 100ms units (10=1sec)'),
   }),
-}, async ({ roomId, on, hue, saturation, lightness, colorTemp, transitionTime }) => {
+}, async ({ roomId, on, color, colorTemp, transitionTime }) => {
   if (!isConfigured()) return notConfigured();
   try {
-    await hueClient.setRoomState(roomId, { on, bri: toBri(lightness), hue: toHue(hue), sat: toSat(saturation), ct: colorTemp, transitiontime: transitionTime });
+    const colorState = color ? parseColor(color) : {};
+    if (color && !parseColor(color)) return err({ message: `Invalid color: "${color}"` });
+    await hueClient.setRoomState(roomId, { on, ...colorState, ct: colorTemp, transitiontime: transitionTime });
     return ok(`Room ${roomId} state updated`);
   } catch (e) { return err(e); }
 });
@@ -300,17 +333,17 @@ server.registerTool('turn_all_lights_on', {
 
 server.registerTool('set_all_lights_color', {
   title: 'Set All Lights Color',
-  description: 'Set color of ALL lights. Example: red at full brightness = hue:0, saturation:1, lightness:1',
+  description: 'Set the color of ALL lights in the house at once. Accepts any CSS color format. This is the easiest way to change all lights to a color.',
   inputSchema: z.object({
-    hue: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=red, 0.33=green, 0.66=blue'),
-    saturation: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=white, 1=vivid color'),
-    lightness: z.coerce.number().min(0).max(1).describe('0 to 1 only. 0=off, 0.5=medium, 1=bright'),
+    color: z.string().describe('Required. Any CSS color: name (red, blue, cyan, coral, tomato), hex (#ff0000, #f00), rgb (rgb(255,0,0)), or hsl (hsl(0,100%,50%)). Examples: "red", "#00ff00", "rgb(0,0,255)", "hsl(180,100%,50%)"'),
   }),
-}, async ({ hue, saturation, lightness }) => {
+}, async ({ color }) => {
   if (!isConfigured()) return notConfigured();
+  const native = parseColor(color);
+  if (!native) return err({ message: `Invalid color: "${color}". Use CSS colors like "red", "#ff0000", "rgb(255,0,0)", or "hsl(0,100%,50%)"` });
   try {
-    await hueClient.setRoomState('0', { on: true, bri: toBri(lightness), hue: toHue(hue), sat: toSat(saturation) });
-    return ok('All lights color set');
+    await hueClient.setRoomState('0', { on: true, ...native });
+    return ok(`All lights set to ${color}`);
   } catch (e) { return err(e); }
 });
 
@@ -323,8 +356,7 @@ server.registerTool('discover_bridges', {
   description: 'Discover Philips Hue bridges on your local network using the Hue discovery service',
 }, async () => {
   try {
-    const response = await axios.get('https://discovery.meethue.com/', { timeout: 10000 });
-    const bridges = response.data;
+    const bridges = await httpsRequest('https://discovery.meethue.com/');
     if (!bridges || bridges.length === 0) {
       return ok('No Hue bridges found on the network. Make sure your bridge is powered on and connected to the same network.');
     }
@@ -342,8 +374,8 @@ server.registerTool('create_auth_token', {
   }),
 }, async ({ bridgeIp, appName = 'philips-hue-mcp', deviceName = 'claude-agent' }) => {
   try {
-    const response = await axios.post(`https://${bridgeIp}/api`, { devicetype: `${appName}#${deviceName}` }, { httpsAgent, timeout: 10000 });
-    const result = response.data;
+    const body = JSON.stringify({ devicetype: `${appName}#${deviceName}` });
+    const result = await httpsRequest(`https://${bridgeIp}/api`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }, body);
 
     if (Array.isArray(result) && result[0]?.error) {
       const error = result[0].error;
