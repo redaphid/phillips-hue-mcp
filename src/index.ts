@@ -298,6 +298,22 @@ server.registerTool('turn_all_lights_on', {
   catch (e) { return err(e); }
 });
 
+server.registerTool('set_all_lights_color', {
+  title: 'Set All Lights Color',
+  description: 'Set the color of all lights in the house using HSL. All values are decimals from 0 to 1.',
+  inputSchema: z.object({
+    hue: z.coerce.number().min(0).max(1).describe('Decimal 0-1. Red=0, green=0.33, blue=0.66'),
+    saturation: z.coerce.number().min(0).max(1).describe('Decimal 0-1. White=0, full color=1'),
+    lightness: z.coerce.number().min(0).max(1).describe('Decimal 0-1. Off=0, full brightness=1'),
+  }),
+}, async ({ hue, saturation, lightness }) => {
+  if (!isConfigured()) return notConfigured();
+  try {
+    await hueClient.setRoomState('0', { on: true, bri: toBri(lightness), hue: toHue(hue), sat: toSat(saturation) });
+    return ok('All lights color set');
+  } catch (e) { return err(e); }
+});
+
 // ============================================
 // SETUP & AUTHENTICATION TOOLS
 // ============================================
