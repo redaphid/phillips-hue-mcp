@@ -76,7 +76,7 @@ server.registerTool('set_light_brightness', {
   description: 'Set the brightness of a specific light (1-254)',
   inputSchema: z.object({
     lightId: z.string().describe('The ID of the light'),
-    brightness: z.number().min(1).max(254).describe('Brightness value (1-254)'),
+    brightness: z.coerce.number().min(1).max(254).describe('Brightness value (1-254)'),
   }),
 }, async ({ lightId, brightness }) => {
   if (!isConfigured()) return notConfigured();
@@ -89,8 +89,8 @@ server.registerTool('set_light_color', {
   description: 'Set the color of a specific light using hue (0-65535) and saturation (0-254)',
   inputSchema: z.object({
     lightId: z.string().describe('The ID of the light'),
-    hue: z.number().min(0).max(65535).describe('Hue value (0-65535, where 0/65535=red, ~21845=green, ~43690=blue)'),
-    saturation: z.number().min(0).max(254).describe('Saturation value (0-254, 0=white, 254=full color)'),
+    hue: z.coerce.number().min(0).max(65535).describe('Hue value (0-65535, where 0/65535=red, ~21845=green, ~43690=blue)'),
+    saturation: z.coerce.number().min(0).max(254).describe('Saturation value (0-254, 0=white, 254=full color)'),
   }),
 }, async ({ lightId, hue, saturation }) => {
   if (!isConfigured()) return notConfigured();
@@ -103,7 +103,7 @@ server.registerTool('set_light_color_temp', {
   description: 'Set the color temperature of a specific light in mireds (153-500, lower=cooler/bluer, higher=warmer/yellower)',
   inputSchema: z.object({
     lightId: z.string().describe('The ID of the light'),
-    colorTemp: z.number().min(153).max(500).describe('Color temperature in mireds (153=cool daylight, 500=warm candlelight)'),
+    colorTemp: z.coerce.number().min(153).max(500).describe('Color temperature in mireds (153=cool daylight, 500=warm candlelight)'),
   }),
 }, async ({ lightId, colorTemp }) => {
   if (!isConfigured()) return notConfigured();
@@ -117,11 +117,11 @@ server.registerTool('set_light_state', {
   inputSchema: z.object({
     lightId: z.string().describe('The ID of the light'),
     on: z.boolean().optional().describe('Turn light on or off'),
-    brightness: z.number().min(1).max(254).optional().describe('Brightness (1-254)'),
-    hue: z.number().min(0).max(65535).optional().describe('Hue (0-65535)'),
-    saturation: z.number().min(0).max(254).optional().describe('Saturation (0-254)'),
-    colorTemp: z.number().min(153).max(500).optional().describe('Color temperature in mireds'),
-    transitionTime: z.number().min(0).optional().describe('Transition time in 100ms increments (e.g., 10 = 1 second)'),
+    brightness: z.coerce.number().min(1).max(254).optional().describe('Brightness (1-254)'),
+    hue: z.coerce.number().min(0).max(65535).optional().describe('Hue (0-65535)'),
+    saturation: z.coerce.number().min(0).max(254).optional().describe('Saturation (0-254)'),
+    colorTemp: z.coerce.number().min(153).max(500).optional().describe('Color temperature in mireds'),
+    transitionTime: z.coerce.number().min(0).optional().describe('Transition time in 100ms increments (e.g., 10 = 1 second)'),
   }),
 }, async ({ lightId, on, brightness, hue, saturation, colorTemp, transitionTime }) => {
   if (!isConfigured()) return notConfigured();
@@ -188,7 +188,7 @@ server.registerTool('set_room_brightness', {
   description: 'Set the brightness of all lights in a room (1-254)',
   inputSchema: z.object({
     roomId: z.string().describe('The ID of the room'),
-    brightness: z.number().min(1).max(254).describe('Brightness value (1-254)'),
+    brightness: z.coerce.number().min(1).max(254).describe('Brightness value (1-254)'),
   }),
 }, async ({ roomId, brightness }) => {
   if (!isConfigured()) return notConfigured();
@@ -201,8 +201,8 @@ server.registerTool('set_room_color', {
   description: 'Set the color of all lights in a room using hue and saturation',
   inputSchema: z.object({
     roomId: z.string().describe('The ID of the room'),
-    hue: z.number().min(0).max(65535).describe('Hue value (0-65535)'),
-    saturation: z.number().min(0).max(254).describe('Saturation value (0-254)'),
+    hue: z.coerce.number().min(0).max(65535).describe('Hue value (0-65535)'),
+    saturation: z.coerce.number().min(0).max(254).describe('Saturation value (0-254)'),
   }),
 }, async ({ roomId, hue, saturation }) => {
   if (!isConfigured()) return notConfigured();
@@ -215,7 +215,7 @@ server.registerTool('set_room_color_temp', {
   description: 'Set the color temperature of all lights in a room in mireds',
   inputSchema: z.object({
     roomId: z.string().describe('The ID of the room'),
-    colorTemp: z.number().min(153).max(500).describe('Color temperature in mireds (153-500)'),
+    colorTemp: z.coerce.number().min(153).max(500).describe('Color temperature in mireds (153-500)'),
   }),
 }, async ({ roomId, colorTemp }) => {
   if (!isConfigured()) return notConfigured();
@@ -229,11 +229,11 @@ server.registerTool('set_room_state', {
   inputSchema: z.object({
     roomId: z.string().describe('The ID of the room'),
     on: z.boolean().optional().describe('Turn lights on or off'),
-    brightness: z.number().min(1).max(254).optional().describe('Brightness (1-254)'),
-    hue: z.number().min(0).max(65535).optional().describe('Hue (0-65535)'),
-    saturation: z.number().min(0).max(254).optional().describe('Saturation (0-254)'),
-    colorTemp: z.number().min(153).max(500).optional().describe('Color temperature in mireds'),
-    transitionTime: z.number().min(0).optional().describe('Transition time in 100ms increments'),
+    brightness: z.coerce.number().min(1).max(254).optional().describe('Brightness (1-254)'),
+    hue: z.coerce.number().min(0).max(65535).optional().describe('Hue (0-65535)'),
+    saturation: z.coerce.number().min(0).max(254).optional().describe('Saturation (0-254)'),
+    colorTemp: z.coerce.number().min(153).max(500).optional().describe('Color temperature in mireds'),
+    transitionTime: z.coerce.number().min(0).optional().describe('Transition time in 100ms increments'),
   }),
 }, async ({ roomId, on, brightness, hue, saturation, colorTemp, transitionTime }) => {
   if (!isConfigured()) return notConfigured();
