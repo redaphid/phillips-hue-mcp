@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "phillips-hue": {
+    "philips-hue": {
       "type": "http",
       "url": "http://localhost:3100/mcp"
     }

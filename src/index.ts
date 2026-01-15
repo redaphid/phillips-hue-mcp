@@ -291,10 +291,10 @@ server.registerTool('create_auth_token', {
   description: 'Create a new auth token for the Hue bridge. IMPORTANT: You must press the button on the Hue bridge first, then call this within 30 seconds!',
   inputSchema: z.object({
     bridgeIp: z.string().describe('The IP address of the Hue bridge'),
-    appName: z.string().optional().describe('Application name (default: phillips-hue-mcp)'),
+    appName: z.string().optional().describe('Application name (default: philips-hue-mcp)'),
     deviceName: z.string().optional().describe('Device name (default: claude-agent)'),
   }),
-}, async ({ bridgeIp, appName = 'phillips-hue-mcp', deviceName = 'claude-agent' }) => {
+}, async ({ bridgeIp, appName = 'philips-hue-mcp', deviceName = 'claude-agent' }) => {
   try {
     const response = await axios.post(`https://${bridgeIp}/api`, { devicetype: `${appName}#${deviceName}` }, { httpsAgent, timeout: 10000 });
     const result = response.data;
