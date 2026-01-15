@@ -32,13 +32,8 @@ export interface HueScene {
 
 export class HueClient {
   private api: AxiosInstance;
-  private bridgeIp: string;
-  private username: string;
 
   constructor(bridgeIp: string, username: string) {
-    this.bridgeIp = bridgeIp;
-    this.username = username;
-
     this.api = axios.create({
       baseURL: `https://${bridgeIp}/api/${username}`,
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
@@ -48,42 +43,34 @@ export class HueClient {
 
   async getLights(): Promise<HueLight[]> {
     const response = await this.api.get('/lights');
-    const lights: HueLight[] = [];
-
-    for (const [id, data] of Object.entries(response.data)) {
-      const light = data as any;
-      lights.push({
-        id,
-        name: light.name,
-        type: light.type,
-        on: light.state.on,
-        brightness: light.state.bri,
-        colorMode: light.state.colormode,
-        hue: light.state.hue,
-        saturation: light.state.sat,
-        colorTemp: light.state.ct,
-        reachable: light.state.reachable,
-      });
-    }
-
-    return lights;
+    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
+      id,
+      name: data.name,
+      type: data.type,
+      on: data.state.on,
+      brightness: data.state.bri,
+      colorMode: data.state.colormode,
+      hue: data.state.hue,
+      saturation: data.state.sat,
+      colorTemp: data.state.ct,
+      reachable: data.state.reachable,
+    }));
   }
 
   async getLight(lightId: string): Promise<HueLight> {
     const response = await this.api.get(`/lights/${lightId}`);
-    const light = response.data;
-
+    const data = response.data;
     return {
       id: lightId,
-      name: light.name,
-      type: light.type,
-      on: light.state.on,
-      brightness: light.state.bri,
-      colorMode: light.state.colormode,
-      hue: light.state.hue,
-      saturation: light.state.sat,
-      colorTemp: light.state.ct,
-      reachable: light.state.reachable,
+      name: data.name,
+      type: data.type,
+      on: data.state.on,
+      brightness: data.state.bri,
+      colorMode: data.state.colormode,
+      hue: data.state.hue,
+      saturation: data.state.sat,
+      colorTemp: data.state.ct,
+      reachable: data.state.reachable,
     };
   }
 
@@ -107,53 +94,45 @@ export class HueClient {
   }
 
   async setBrightness(lightId: string, brightness: number): Promise<void> {
-    const bri = Math.max(1, Math.min(254, brightness));
-    await this.setLightState(lightId, { on: true, bri });
+    await this.setLightState(lightId, { on: true, bri: Math.max(1, Math.min(254, brightness)) });
   }
 
   async setColor(lightId: string, hue: number, saturation: number): Promise<void> {
-    const h = Math.max(0, Math.min(65535, hue));
-    const s = Math.max(0, Math.min(254, saturation));
-    await this.setLightState(lightId, { on: true, hue: h, sat: s });
+    await this.setLightState(lightId, {
+      on: true,
+      hue: Math.max(0, Math.min(65535, hue)),
+      sat: Math.max(0, Math.min(254, saturation)),
+    });
   }
 
   async setColorTemp(lightId: string, colorTemp: number): Promise<void> {
-    const ct = Math.max(153, Math.min(500, colorTemp));
-    await this.setLightState(lightId, { on: true, ct });
+    await this.setLightState(lightId, { on: true, ct: Math.max(153, Math.min(500, colorTemp)) });
   }
 
   async getRooms(): Promise<HueRoom[]> {
     const response = await this.api.get('/groups');
-    const rooms: HueRoom[] = [];
-
-    for (const [id, data] of Object.entries(response.data)) {
-      const group = data as any;
-      if (group.type === 'Room' || group.type === 'Zone') {
-        rooms.push({
-          id,
-          name: group.name,
-          type: group.type,
-          lights: group.lights,
-          on: group.action?.on ?? false,
-          brightness: group.action?.bri ?? 0,
-        });
-      }
-    }
-
-    return rooms;
+    return Object.entries(response.data)
+      .filter(([, data]: [string, any]) => data.type === 'Room' || data.type === 'Zone')
+      .map(([id, data]: [string, any]) => ({
+        id,
+        name: data.name,
+        type: data.type,
+        lights: data.lights,
+        on: data.action?.on ?? false,
+        brightness: data.action?.bri ?? 0,
+      }));
   }
 
   async getRoom(roomId: string): Promise<HueRoom> {
     const response = await this.api.get(`/groups/${roomId}`);
-    const group = response.data;
-
+    const data = response.data;
     return {
       id: roomId,
-      name: group.name,
-      type: group.type,
-      lights: group.lights,
-      on: group.action?.on ?? false,
-      brightness: group.action?.bri ?? 0,
+      name: data.name,
+      type: data.type,
+      lights: data.lights,
+      on: data.action?.on ?? false,
+      brightness: data.action?.bri ?? 0,
     };
   }
 
@@ -177,36 +156,29 @@ export class HueClient {
   }
 
   async setRoomBrightness(roomId: string, brightness: number): Promise<void> {
-    const bri = Math.max(1, Math.min(254, brightness));
-    await this.setRoomState(roomId, { on: true, bri });
+    await this.setRoomState(roomId, { on: true, bri: Math.max(1, Math.min(254, brightness)) });
   }
 
   async setRoomColor(roomId: string, hue: number, saturation: number): Promise<void> {
-    const h = Math.max(0, Math.min(65535, hue));
-    const s = Math.max(0, Math.min(254, saturation));
-    await this.setRoomState(roomId, { on: true, hue: h, sat: s });
+    await this.setRoomState(roomId, {
+      on: true,
+      hue: Math.max(0, Math.min(65535, hue)),
+      sat: Math.max(0, Math.min(254, saturation)),
+    });
   }
 
   async setRoomColorTemp(roomId: string, colorTemp: number): Promise<void> {
-    const ct = Math.max(153, Math.min(500, colorTemp));
-    await this.setRoomState(roomId, { on: true, ct });
+    await this.setRoomState(roomId, { on: true, ct: Math.max(153, Math.min(500, colorTemp)) });
   }
 
   async getScenes(): Promise<HueScene[]> {
     const response = await this.api.get('/scenes');
-    const scenes: HueScene[] = [];
-
-    for (const [id, data] of Object.entries(response.data)) {
-      const scene = data as any;
-      scenes.push({
-        id,
-        name: scene.name,
-        group: scene.group,
-        type: scene.type,
-      });
-    }
-
-    return scenes;
+    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
+      id,
+      name: data.name,
+      group: data.group,
+      type: data.type,
+    }));
   }
 
   async activateScene(sceneId: string, groupId?: string): Promise<void> {
@@ -215,30 +187,19 @@ export class HueClient {
     } else {
       const scenes = await this.getScenes();
       const scene = scenes.find(s => s.id === sceneId);
-      if (scene?.group) {
-        await this.api.put(`/groups/${scene.group}/action`, { scene: sceneId });
-      } else {
-        await this.api.put('/groups/0/action', { scene: sceneId });
-      }
+      await this.api.put(`/groups/${scene?.group || '0'}/action`, { scene: sceneId });
     }
   }
 
-  async getAllGroups(): Promise<any[]> {
+  async getAllGroups(): Promise<HueRoom[]> {
     const response = await this.api.get('/groups');
-    const groups: any[] = [];
-
-    for (const [id, data] of Object.entries(response.data)) {
-      const group = data as any;
-      groups.push({
-        id,
-        name: group.name,
-        type: group.type,
-        lights: group.lights,
-        on: group.action?.on ?? false,
-        brightness: group.action?.bri ?? 0,
-      });
-    }
-
-    return groups;
+    return Object.entries(response.data).map(([id, data]: [string, any]) => ({
+      id,
+      name: data.name,
+      type: data.type,
+      lights: data.lights,
+      on: data.action?.on ?? false,
+      brightness: data.action?.bri ?? 0,
+    }));
   }
 }
