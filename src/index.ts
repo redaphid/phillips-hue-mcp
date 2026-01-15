@@ -25,6 +25,8 @@ const server = new McpServer({
 const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 const err = (error: any) => ({ content: [{ type: 'text' as const, text: `Error: ${error.message}` }], isError: true });
 const json = (data: unknown) => ok(JSON.stringify(data, null, 2));
+const notConfigured = () => ok('Not configured. Set HUE_BRIDGE_IP and HUE_USERNAME environment variables, or use discover_bridges and create_auth_token tools.');
+const isConfigured = () => HUE_BRIDGE_IP && HUE_USERNAME;
 
 // ============================================
 // LIGHT TOOLS
@@ -34,6 +36,7 @@ server.registerTool('list_lights', {
   title: 'List Lights',
   description: 'Get a list of all Philips Hue lights with their current state',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getLights()); }
   catch (e) { return err(e); }
 });
@@ -43,6 +46,7 @@ server.registerTool('get_light', {
   description: 'Get details of a specific light by its ID',
   inputSchema: z.object({ lightId: z.string().describe('The ID of the light to get') }),
 }, async ({ lightId }) => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getLight(lightId)); }
   catch (e) { return err(e); }
 });
@@ -52,6 +56,7 @@ server.registerTool('turn_light_on', {
   description: 'Turn on a specific light',
   inputSchema: z.object({ lightId: z.string().describe('The ID of the light to turn on') }),
 }, async ({ lightId }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.turnLightOn(lightId); return ok(`Light ${lightId} turned on`); }
   catch (e) { return err(e); }
 });
@@ -61,6 +66,7 @@ server.registerTool('turn_light_off', {
   description: 'Turn off a specific light',
   inputSchema: z.object({ lightId: z.string().describe('The ID of the light to turn off') }),
 }, async ({ lightId }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.turnLightOff(lightId); return ok(`Light ${lightId} turned off`); }
   catch (e) { return err(e); }
 });
@@ -73,6 +79,7 @@ server.registerTool('set_light_brightness', {
     brightness: z.number().min(1).max(254).describe('Brightness value (1-254)'),
   }),
 }, async ({ lightId, brightness }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setBrightness(lightId, brightness); return ok(`Light ${lightId} brightness set to ${brightness}`); }
   catch (e) { return err(e); }
 });
@@ -86,6 +93,7 @@ server.registerTool('set_light_color', {
     saturation: z.number().min(0).max(254).describe('Saturation value (0-254, 0=white, 254=full color)'),
   }),
 }, async ({ lightId, hue, saturation }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setColor(lightId, hue, saturation); return ok(`Light ${lightId} color set to hue=${hue}, saturation=${saturation}`); }
   catch (e) { return err(e); }
 });
@@ -98,6 +106,7 @@ server.registerTool('set_light_color_temp', {
     colorTemp: z.number().min(153).max(500).describe('Color temperature in mireds (153=cool daylight, 500=warm candlelight)'),
   }),
 }, async ({ lightId, colorTemp }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setColorTemp(lightId, colorTemp); return ok(`Light ${lightId} color temperature set to ${colorTemp} mireds`); }
   catch (e) { return err(e); }
 });
@@ -115,6 +124,7 @@ server.registerTool('set_light_state', {
     transitionTime: z.number().min(0).optional().describe('Transition time in 100ms increments (e.g., 10 = 1 second)'),
   }),
 }, async ({ lightId, on, brightness, hue, saturation, colorTemp, transitionTime }) => {
+  if (!isConfigured()) return notConfigured();
   try {
     await hueClient.setLightState(lightId, { on, bri: brightness, hue, sat: saturation, ct: colorTemp, transitiontime: transitionTime });
     return ok(`Light ${lightId} state updated`);
@@ -129,6 +139,7 @@ server.registerTool('list_rooms', {
   title: 'List Rooms',
   description: 'Get a list of all rooms and zones',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getRooms()); }
   catch (e) { return err(e); }
 });
@@ -137,6 +148,7 @@ server.registerTool('list_groups', {
   title: 'List All Groups',
   description: 'Get a list of all groups including rooms, zones, and entertainment areas',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getAllGroups()); }
   catch (e) { return err(e); }
 });
@@ -146,6 +158,7 @@ server.registerTool('get_room', {
   description: 'Get details of a specific room by its ID',
   inputSchema: z.object({ roomId: z.string().describe('The ID of the room') }),
 }, async ({ roomId }) => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getRoom(roomId)); }
   catch (e) { return err(e); }
 });
@@ -155,6 +168,7 @@ server.registerTool('turn_room_on', {
   description: 'Turn on all lights in a room',
   inputSchema: z.object({ roomId: z.string().describe('The ID of the room') }),
 }, async ({ roomId }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.turnRoomOn(roomId); return ok(`Room ${roomId} turned on`); }
   catch (e) { return err(e); }
 });
@@ -164,6 +178,7 @@ server.registerTool('turn_room_off', {
   description: 'Turn off all lights in a room',
   inputSchema: z.object({ roomId: z.string().describe('The ID of the room') }),
 }, async ({ roomId }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.turnRoomOff(roomId); return ok(`Room ${roomId} turned off`); }
   catch (e) { return err(e); }
 });
@@ -176,6 +191,7 @@ server.registerTool('set_room_brightness', {
     brightness: z.number().min(1).max(254).describe('Brightness value (1-254)'),
   }),
 }, async ({ roomId, brightness }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setRoomBrightness(roomId, brightness); return ok(`Room ${roomId} brightness set to ${brightness}`); }
   catch (e) { return err(e); }
 });
@@ -189,6 +205,7 @@ server.registerTool('set_room_color', {
     saturation: z.number().min(0).max(254).describe('Saturation value (0-254)'),
   }),
 }, async ({ roomId, hue, saturation }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setRoomColor(roomId, hue, saturation); return ok(`Room ${roomId} color set to hue=${hue}, saturation=${saturation}`); }
   catch (e) { return err(e); }
 });
@@ -201,6 +218,7 @@ server.registerTool('set_room_color_temp', {
     colorTemp: z.number().min(153).max(500).describe('Color temperature in mireds (153-500)'),
   }),
 }, async ({ roomId, colorTemp }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setRoomColorTemp(roomId, colorTemp); return ok(`Room ${roomId} color temperature set to ${colorTemp} mireds`); }
   catch (e) { return err(e); }
 });
@@ -218,6 +236,7 @@ server.registerTool('set_room_state', {
     transitionTime: z.number().min(0).optional().describe('Transition time in 100ms increments'),
   }),
 }, async ({ roomId, on, brightness, hue, saturation, colorTemp, transitionTime }) => {
+  if (!isConfigured()) return notConfigured();
   try {
     await hueClient.setRoomState(roomId, { on, bri: brightness, hue, sat: saturation, ct: colorTemp, transitiontime: transitionTime });
     return ok(`Room ${roomId} state updated`);
@@ -232,6 +251,7 @@ server.registerTool('list_scenes', {
   title: 'List Scenes',
   description: 'Get a list of all available scenes',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { return json(await hueClient.getScenes()); }
   catch (e) { return err(e); }
 });
@@ -244,6 +264,7 @@ server.registerTool('activate_scene', {
     groupId: z.string().optional().describe('Optional group ID to apply the scene to'),
   }),
 }, async ({ sceneId, groupId }) => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.activateScene(sceneId, groupId); return ok(`Scene ${sceneId} activated${groupId ? ` in group ${groupId}` : ''}`); }
   catch (e) { return err(e); }
 });
@@ -256,6 +277,7 @@ server.registerTool('turn_all_lights_off', {
   title: 'Turn All Lights Off',
   description: 'Turn off all lights in the house',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setRoomState('0', { on: false }); return ok('All lights turned off'); }
   catch (e) { return err(e); }
 });
@@ -264,6 +286,7 @@ server.registerTool('turn_all_lights_on', {
   title: 'Turn All Lights On',
   description: 'Turn on all lights in the house',
 }, async () => {
+  if (!isConfigured()) return notConfigured();
   try { await hueClient.setRoomState('0', { on: true }); return ok('All lights turned on'); }
   catch (e) { return err(e); }
 });
