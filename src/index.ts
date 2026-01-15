@@ -107,14 +107,15 @@ server.registerTool('turn_light_off', {
 
 server.registerTool('set_light_brightness', {
   title: 'Set Light Brightness',
-  description: 'Set the brightness of a specific light (1-254)',
+  description: 'Set the brightness of a specific light (0-1)',
   inputSchema: z.object({
     lightId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_lights.'),
-    brightness: z.coerce.number().min(1).max(254).describe('Brightness value (1-254)'),
+    brightness: z.coerce.number().min(0).max(1).describe('Brightness value (0-1). 0=off, 1=full brightness'),
   }),
 }, async ({ lightId, brightness }) => {
   if (!isConfigured()) return notConfigured();
-  try { await hueClient.setBrightness(lightId, brightness); return ok(`Light ${lightId} brightness set to ${brightness}`); }
+  const bri = Math.max(1, Math.round(brightness * 254));
+  try { await hueClient.setBrightness(lightId, bri); return ok(`Light ${lightId} brightness set to ${brightness}`); }
   catch (e) { return err(e); }
 });
 
@@ -222,14 +223,15 @@ server.registerTool('turn_room_off', {
 
 server.registerTool('set_room_brightness', {
   title: 'Set Room Brightness',
-  description: 'Set the brightness of all lights in a room (1-254)',
+  description: 'Set the brightness of all lights in a room (0-1)',
   inputSchema: z.object({
     roomId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_rooms.'),
-    brightness: z.coerce.number().min(1).max(254).describe('Brightness value (1-254)'),
+    brightness: z.coerce.number().min(0).max(1).describe('Brightness value (0-1). 0=off, 1=full brightness'),
   }),
 }, async ({ roomId, brightness }) => {
   if (!isConfigured()) return notConfigured();
-  try { await hueClient.setRoomBrightness(roomId, brightness); return ok(`Room ${roomId} brightness set to ${brightness}`); }
+  const bri = Math.max(1, Math.round(brightness * 254));
+  try { await hueClient.setRoomBrightness(roomId, bri); return ok(`Room ${roomId} brightness set to ${brightness}`); }
   catch (e) { return err(e); }
 });
 
