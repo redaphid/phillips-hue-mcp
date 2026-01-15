@@ -108,10 +108,17 @@ server.registerTool('turn_light_off', {
 
 server.registerTool('set_light_brightness', {
   title: 'Set Light Brightness',
-  description: 'Set the brightness of a specific light (0-1)',
+  description: `Set the brightness of a specific light without changing its color.
+
+Brightness is a value from 0 to 1, where 0 is minimum brightness and 1 is maximum brightness.
+
+<example>Set light 1 to full brightness: lightId="1", brightness=1</example>
+<example>Set light 2 to 50% brightness: lightId="2", brightness=0.5</example>
+<example>Set light 3 to dim (25%): lightId="3", brightness=0.25</example>
+<example>Set light 1 to very dim (10%): lightId="1", brightness=0.1</example>`,
   inputSchema: z.object({
-    lightId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_lights.'),
-    brightness: z.coerce.number().min(0).max(1).describe('Brightness value (0-1). 0=off, 1=full brightness'),
+    lightId: z.string().describe('Required. The numeric light ID as a string. Get IDs by calling list_lights first. <example>"1"</example> <example>"2"</example> <example>"13"</example>'),
+    brightness: z.coerce.number().min(0).max(1).describe('Required. Brightness from 0 to 1. <example>1</example> <example>0.5</example> <example>0.25</example> <example>0.1</example>'),
   }),
 }, async ({ lightId, brightness }) => {
   if (!isConfigured()) return notConfigured();
@@ -122,10 +129,19 @@ server.registerTool('set_light_brightness', {
 
 server.registerTool('set_light_color', {
   title: 'Set Light Color',
-  description: 'Changes the color of ONE specific light. Use set_all_lights_color instead if you want to change ALL lights. Accepts any CSS color format. Alpha controls brightness.',
+  description: `Changes the color of ONE specific light. Use set_all_lights_color instead if you want to change ALL lights.
+
+Accepts any CSS color format. The alpha channel (0-1) controls brightness - use rgba() or hsla() to set both color and brightness at once.
+
+<example>Set light 1 to red at full brightness: lightId="1", color="red"</example>
+<example>Set light 2 to blue at full brightness: lightId="2", color="#0000ff"</example>
+<example>Set light 1 to green at 50% brightness: lightId="1", color="rgba(0,255,0,0.5)"</example>
+<example>Set light 3 to purple at 25% brightness: lightId="3", color="rgba(128,0,128,0.25)"</example>
+<example>Set light 1 to warm orange: lightId="1", color="rgb(255,165,0)"</example>
+<example>Set light 2 to cyan at 75% brightness: lightId="2", color="hsla(180,100%,50%,0.75)"</example>`,
   inputSchema: z.object({
-    lightId: z.string().describe('Required. The light ID as a string like "1" or "2". Get valid IDs by calling list_lights first.'),
-    color: z.string().describe('CSS color with optional alpha for brightness. Examples: "red", "#ff0000", "rgba(255,0,0,0.5)" for red at 50% brightness'),
+    lightId: z.string().describe('Required. The numeric light ID as a string. Get IDs by calling list_lights first. <example>"1"</example> <example>"2"</example> <example>"13"</example>'),
+    color: z.string().describe('Required. Any CSS color. Use alpha (0-1) to control brightness. <example>"red"</example> <example>"#ff0000"</example> <example>"rgb(255,0,0)"</example> <example>"rgba(255,0,0,0.5)"</example> <example>"hsl(0,100%,50%)"</example> <example>"hsla(240,100%,50%,0.75)"</example>'),
   }),
 }, async ({ lightId, color }) => {
   if (!isConfigured()) return notConfigured();
@@ -224,10 +240,17 @@ server.registerTool('turn_room_off', {
 
 server.registerTool('set_room_brightness', {
   title: 'Set Room Brightness',
-  description: 'Set the brightness of all lights in a room (0-1)',
+  description: `Set the brightness of all lights in a room without changing their color.
+
+Brightness is a value from 0 to 1, where 0 is minimum brightness and 1 is maximum brightness.
+
+<example>Set living room to full brightness: roomId="1", brightness=1</example>
+<example>Set bedroom to 50% brightness: roomId="2", brightness=0.5</example>
+<example>Set office to dim (25%): roomId="3", brightness=0.25</example>
+<example>Set kitchen to very dim (10%): roomId="4", brightness=0.1</example>`,
   inputSchema: z.object({
-    roomId: z.string().describe('Numeric ID (e.g. "1", "2"). Get IDs from list_rooms.'),
-    brightness: z.coerce.number().min(0).max(1).describe('Brightness value (0-1). 0=off, 1=full brightness'),
+    roomId: z.string().describe('Required. The numeric room ID as a string. Get IDs by calling list_rooms first. <example>"1"</example> <example>"2"</example>'),
+    brightness: z.coerce.number().min(0).max(1).describe('Required. Brightness from 0 to 1. <example>1</example> <example>0.5</example> <example>0.25</example> <example>0.1</example>'),
   }),
 }, async ({ roomId, brightness }) => {
   if (!isConfigured()) return notConfigured();
@@ -238,10 +261,17 @@ server.registerTool('set_room_brightness', {
 
 server.registerTool('set_room_color', {
   title: 'Set Room Color',
-  description: 'Set the color of ALL lights in a room. Accepts any CSS color format. Alpha controls brightness.',
+  description: `Set the color of ALL lights in a room at once.
+
+Accepts any CSS color format. The alpha channel (0-1) controls brightness - use rgba() or hsla() to set both color and brightness at once.
+
+<example>Set living room to red: roomId="1", color="red"</example>
+<example>Set bedroom to blue at 50% brightness: roomId="2", color="rgba(0,0,255,0.5)"</example>
+<example>Set office to warm white: roomId="3", color="rgb(255,244,229)"</example>
+<example>Set kitchen to green at 75% brightness: roomId="4", color="hsla(120,100%,50%,0.75)"</example>`,
   inputSchema: z.object({
-    roomId: z.string().describe('Required. The room ID as a string like "1" or "2". Get valid IDs by calling list_rooms first.'),
-    color: z.string().describe('CSS color with optional alpha for brightness. Examples: "red", "#ff0000", "rgba(255,0,0,0.5)" for red at 50% brightness'),
+    roomId: z.string().describe('Required. The numeric room ID as a string. Get IDs by calling list_rooms first. <example>"1"</example> <example>"2"</example>'),
+    color: z.string().describe('Required. Any CSS color. Use alpha (0-1) to control brightness. <example>"red"</example> <example>"#ff0000"</example> <example>"rgba(255,0,0,0.5)"</example> <example>"hsla(240,100%,50%,0.75)"</example>'),
   }),
 }, async ({ roomId, color }) => {
   if (!isConfigured()) return notConfigured();
@@ -336,9 +366,20 @@ server.registerTool('turn_all_lights_on', {
 
 server.registerTool('set_all_lights_color', {
   title: 'Set All Lights Color',
-  description: 'Set the color of ALL lights in the house at once. Accepts any CSS color format. Alpha controls brightness.',
+  description: `Set the color of ALL lights in the entire house at once. This is the easiest way to change all lights to one color.
+
+Accepts any CSS color format. The alpha channel (0-1) controls brightness - use rgba() or hsla() to set both color and brightness at once.
+
+<example>Set all lights to red: color="red"</example>
+<example>Set all lights to blue at full brightness: color="#0000ff"</example>
+<example>Set all lights to green at 50% brightness: color="rgba(0,255,0,0.5)"</example>
+<example>Set all lights to purple at 25% brightness: color="rgba(128,0,128,0.25)"</example>
+<example>Set all lights to warm orange: color="rgb(255,165,0)"</example>
+<example>Set all lights to cyan at 75% brightness: color="hsla(180,100%,50%,0.75)"</example>
+<example>Set all lights to pink: color="pink"</example>
+<example>Set all lights to dim red for movie night: color="rgba(255,0,0,0.2)"</example>`,
   inputSchema: z.object({
-    color: z.string().describe('CSS color with optional alpha for brightness. Examples: "red", "#ff0000", "rgba(255,0,0,0.5)" for red at 50% brightness'),
+    color: z.string().describe('Required. Any CSS color. Use alpha (0-1) to control brightness. <example>"red"</example> <example>"blue"</example> <example>"#ff0000"</example> <example>"rgba(255,0,0,0.5)"</example> <example>"hsla(240,100%,50%,0.75)"</example> <example>"pink"</example> <example>"coral"</example>'),
   }),
 }, async ({ color }) => {
   if (!isConfigured()) return notConfigured();
