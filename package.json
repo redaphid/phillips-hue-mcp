@@ -1,6 +1,6 @@
 {
   "name": "philips-hue-mcp",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "MCP server for controlling Philips Hue lights",
   "type": "module",
   "main": "dist/index.js",
