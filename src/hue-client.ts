@@ -73,6 +73,7 @@ export class HueClient {
 
   private get(path: string) { return this.request('GET', path); }
   private put(path: string, body: object) { return this.request('PUT', path, body); }
+  private post(path: string, body: object) { return this.request('POST', path, body); }
 
   async getLights(): Promise<HueLight[]> {
     const data = await this.get('/lights');
@@ -139,6 +140,18 @@ export class HueClient {
       const scene = scenes.find(s => s.id === sceneId);
       await this.put(`/groups/${scene?.group || '0'}/action`, { scene: sceneId });
     }
+  }
+
+  async createScene(name: string, lights: string[], groupId?: string): Promise<string> {
+    const result = await this.post('/scenes', {
+      name,
+      lights,
+      group: groupId,
+      recycle: false,
+      type: 'LightScene',
+    });
+    if (Array.isArray(result) && result[0]?.success?.id) return result[0].success.id;
+    throw new Error(result[0]?.error?.description || 'Failed to create scene');
   }
 
   async getAllGroups(): Promise<HueRoom[]> {

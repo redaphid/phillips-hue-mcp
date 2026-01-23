@@ -342,6 +342,38 @@ server.registerTool('activate_scene', {
   catch (e) { return err(e); }
 });
 
+server.registerTool('create_scene', {
+  title: 'Create Scene',
+  description: `Create a new scene that captures the current state of specified lights.
+
+The scene saves the current color, brightness, and on/off state of the lights. You can then activate this scene later to restore those settings.
+
+<example>Create scene from all lights in room 1: name="Movie Night", roomId="1"</example>
+<example>Create scene from specific lights: name="Reading", lightIds=["1", "3", "5"]</example>
+<example>Create scene from room 2: name="Dinner Party", roomId="2"</example>`,
+  inputSchema: z.object({
+    name: z.string().describe('Required. Name for the scene. <example>"Movie Night"</example> <example>"Reading"</example> <example>"Party Mode"</example>'),
+    roomId: z.string().optional().describe('Create scene from all lights in this room. Get IDs from list_rooms. <example>"1"</example> <example>"2"</example>'),
+    lightIds: z.array(z.string()).optional().describe('Create scene from specific lights. Get IDs from list_lights. <example>["1", "2", "3"]</example>'),
+  }),
+}, async ({ name, roomId, lightIds }) => {
+  if (!isConfigured()) return notConfigured();
+  try {
+    let lights: string[];
+    if (lightIds && lightIds.length > 0) {
+      lights = lightIds;
+    } else if (roomId) {
+      const room = await hueClient.getRoom(roomId);
+      lights = room.lights;
+    } else {
+      const allLights = await hueClient.getLights();
+      lights = allLights.map(l => l.id);
+    }
+    const sceneId = await hueClient.createScene(name, lights, roomId);
+    return ok(`Scene "${name}" created with ID: ${sceneId}`);
+  } catch (e) { return err(e); }
+});
+
 // ============================================
 // GLOBAL TOOLS
 // ============================================
