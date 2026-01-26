@@ -74,6 +74,7 @@ export class HueClient {
   private get(path: string) { return this.request('GET', path); }
   private put(path: string, body: object) { return this.request('PUT', path, body); }
   private post(path: string, body: object) { return this.request('POST', path, body); }
+  private delete(path: string) { return this.request('DELETE', path); }
 
   async getLights(): Promise<HueLight[]> {
     const data = await this.get('/lights');
@@ -152,6 +153,13 @@ export class HueClient {
     });
     if (Array.isArray(result) && result[0]?.success?.id) return result[0].success.id;
     throw new Error(result[0]?.error?.description || 'Failed to create scene');
+  }
+
+  async deleteScene(sceneId: string): Promise<void> {
+    const result = await this.delete(`/scenes/${sceneId}`);
+    if (Array.isArray(result) && result[0]?.error) {
+      throw new Error(result[0].error.description || 'Failed to delete scene');
+    }
   }
 
   async getAllGroups(): Promise<HueRoom[]> {

@@ -2,7 +2,7 @@
   "mcpServers": {
     "philips-hue": {
       "type": "http",
-      "url": "http://localhost:3100/mcp"
+      "url": "http://localhost:3101/mcp"
     }
   }
 }

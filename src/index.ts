@@ -15,7 +15,7 @@ extend([names as unknown as Parameters<typeof extend>[0][number]]);
 
 const HUE_BRIDGE_IP = process.env.HUE_BRIDGE_IP || '';
 const HUE_USERNAME = process.env.HUE_USERNAME || '';
-const PORT = parseInt(process.env.PORT || '3100', 10);
+const PORT = parseInt(process.env.PORT || '3200', 10);
 
 // Convert HSL (0-1) to native Hue format
 const toHue = (v?: number) => v != null ? Math.round(v * 65535) : undefined;
@@ -340,6 +340,20 @@ server.registerTool('activate_scene', {
   if (!isConfigured()) return notConfigured();
   try { await hueClient.activateScene(sceneId, groupId); return ok(`Scene ${sceneId} activated${groupId ? ` in group ${groupId}` : ''}`); }
   catch (e) { return err(e); }
+});
+
+server.registerTool('delete_scene', {
+  title: 'Delete Scene',
+  description: 'Permanently delete a scene from the Hue bridge. This action cannot be undone.',
+  inputSchema: z.object({
+    sceneId: z.string().describe('Scene ID to delete. Get IDs from list_scenes.'),
+  }),
+}, async ({ sceneId }) => {
+  if (!isConfigured()) return notConfigured();
+  try {
+    await hueClient.deleteScene(sceneId);
+    return ok(`Scene ${sceneId} deleted successfully`);
+  } catch (e) { return err(e); }
 });
 
 server.registerTool('create_scene', {
